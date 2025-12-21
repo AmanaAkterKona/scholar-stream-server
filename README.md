@@ -1,7 +1,7 @@
 
 
 🚀 ScholarStream API (Server-Side)
-ScholarStream holo ekti scholarship management system-er backend server. Eti Node.js, Express.js, ar MongoDB diye toiri kora hoyeche. Ekhane secure authentication-er jonno Firebase Admin SDK ar payment-er jonno Stripe integration kora hoyeche.
+ScholarStream is the backend server for a comprehensive scholarship management system. It is built using Node.js, Express.js, and MongoDB, featuring secure authentication via Firebase Admin SDK and payment processing through Stripe.
 
 🛠 Key Technologies
 Runtime: Node.js
@@ -14,47 +14,41 @@ Authentication: Firebase Admin SDK (JWT Verification)
 
 Payment Gateway: Stripe
 
-Security: CORS, Dotenv, JSON Web Tokens
+Security: CORS, Dotenv, JSON Web Tokens (JWT)
 
 ✨ Features & Functionalities
 1. 🔐 Security & Middleware
-Firebase Verification: Protiti secure request-er khetre Firebase token verify kora hoy.
+Firebase Verification: Every secure request is validated using Firebase ID tokens to ensure user authenticity.
 
-Role-Based Access (RBAC): Admin ar Moderator-der jonno alada access control system ache.
+Role-Based Access Control (RBAC): Dedicated access levels for Admin, Moderator, and Student to protect sensitive endpoints.
 
 2. 👥 User Management
-Automatically user details store kora (default role: student).
+Auto-Registration: Automatically stores user details in the database upon their first login (default role: student).
 
-Admin dashboard theke user role change ba delete korar sujog.
+Administrative Control: Admins can manage user roles (promote to Moderator/Admin) or remove users via the dashboard.
 
 3. 🎓 Scholarship System
-Advanced Search: Scholarship-er naam, university, ba degree diye search kora jay.
+Advanced Search: Search scholarships by name, university, or degree.
 
-Filtering: Category ar country onujayi filter korar options.
+Dynamic Filtering: Filter results based on scholarship category and university country.
 
-Full CRUD: Admin scholarship add, update, ba delete korte pare.
+Full CRUD: Admins have full control to Create, Read, Update, and Delete scholarship listings.
 
 4. 📝 Application & Review
-Students scholarship-er jonno apply korte pare.
+Scholarship Applications: Students can apply for scholarships after completing the required fee payment.
 
-Review system jekhane student-ra rating ar comment korte pare (Publicly viewable).
+Review System: Allows students to leave ratings and comments on scholarships, which are viewable by the public.
 
 5. 💳 Payment Integration
-Stripe Checkout: Secure payment processing system.
+Stripe Checkout: A secure, industry-standard payment processing system.
 
-Auto-Save: Payment successful hole application automatic database-e save hoye jay.
+Automated Workflow: Upon successful payment, the application data is automatically validated and saved to the database.
 
-🚦 API Endpoints (Quick Overview)
-Method	Endpoint	Access	Description
-POST	/users	Public	Create new user
-GET	/scholarships	Public	Get all scholarships (Search/Filter)
-POST	/create-checkout-session	Private	Initiate Stripe payment
-PATCH	/payment-success	Private	Verify & Save application after payment
-GET	/applications	Admin/Mod	View all scholarship applications
-DELETE	/reviews/:id	Owner/Admin	Remove a review
+🚦 API Endpoints (Quick Overview)MethodEndpointAccessDescriptionPOST/usersPublicRegisters or updates user infoGET/scholarshipsPublicFetches all scholarships (Supports Search/Filter)POST/create-checkout-sessionPrivateInitializes a Stripe payment sessionPATCH/payment-successPrivateVerifies transaction and saves the applicationGET/applicationsAdmin/ModRetrieves all scholarship applicationsDELETE/reviews/:idOwner/AdminDeletes a specific review
+
 
 ⚙️ Environment Variables Setup
-Root directory-te ekta .env file toiri koro:
+Create a .env file in the root directory and add the following:
 
 Code snippet
 
@@ -64,23 +58,21 @@ DB_PASS=your_mongodb_password
 STRIPE_SECRET=your_stripe_secret_key
 FB_SERVICE_KEY=your_firebase_service_key_in_base64
 CLIENT_URL=http://localhost:5173
-Note: FB_SERVICE_KEY-ta oboshshoi Base64 format-e hote hobe jeta code-e decode kora hoyeche.
+Note: The FB_SERVICE_KEY must be a Base64 encoded string of your Firebase Service Account JSON file for secure decoding in the server.
 
 🚀 How to Run Locally
-Clone the Repo:
+Clone the Repository:
 
 Bash
 
 git clone https://github.com/your-username/scholar-stream-server.git
-Install Packages:
+Install Dependencies:
 
 Bash
 
 npm install
-Start Server:
+Start the Server:
 
 Bash
 
 npm start
-(Or nodemon index.js for development)
-
