@@ -10,8 +10,9 @@ const port = process.env.PORT || 3000;
 
 // ================= FIREBASE ADMIN =================
 
-const serviceAccount = require("./scholar-stream-3e2fc-firebase-adminsdk-fbsvc-036d1f64b8.json");
 
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -44,7 +45,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db("scholar_stream_db");
 
     const users = db.collection("users");
@@ -81,6 +82,14 @@ async function run() {
     };
 
     // ================= USERS =================
+    app.get("/users", verifyFirebaseToken, verifyAdmin, async (req, res) => {
+      const result = await users.find().toArray();
+      res.send(result);
+    });
+
+
+
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       user.role = "student";
@@ -93,17 +102,18 @@ async function run() {
     });
 
     app.get("/users/role", async (req, res) => {
-      const email = req.query.email;
-      if (!email) return res.send({ role: "student" });
+  const email = req.query.email;
 
-      const user = await users.findOne({ email });
-      res.send({ role: user?.role || "student" });
-    });
+  if (!email) {
+    return res.send({ role: "student" });
+  }
 
-    app.get("/users", verifyFirebaseToken, verifyAdmin, async (req, res) => {
-      const result = await users.find().toArray();
-      res.send(result);
-    });
+  const requester = await users.findOne({ email: req.query.email });
+  const requesterRole = requester?.role?.toLowerCase();
+
+  res.send({ role: requesterRole|| "student" });
+});
+
 
     app.patch(
       "/users/role/:id",
@@ -307,7 +317,31 @@ async function run() {
     });
 
     // ================= REVIEWS =================
-    // ➕ ADD REVIEW (Student)
+    //  ADD REVIEW (Student)
+app.get("/reviews/public", async (req, res) => {
+  const result = await reviews
+    .find(
+      {},
+      {
+        projection: {
+          userName: 1,
+          userImage: 1,
+          ratingPoint: 1,
+          reviewComment: 1,
+          universityName: 1,
+          reviewDate: 1,
+        },
+      }
+    )
+    .sort({ reviewDate: -1 })
+    .limit(6)
+    .toArray();
+
+  res.send(result);
+});
+
+
+
     app.post("/reviews", verifyFirebaseToken, async (req, res) => {
       const reviewData = req.body;
 
