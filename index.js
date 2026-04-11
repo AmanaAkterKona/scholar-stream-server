@@ -1,6 +1,11 @@
+
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
+const cron = require("node-cron");
+const nodemailer = require("nodemailer");
+const Anthropic = require("@anthropic-ai/sdk");
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const admin = require("firebase-admin");
@@ -20,6 +25,17 @@ admin.initializeApp({
 // ================= MIDDLEWARE =================
 app.use(cors());
 app.use(express.json());
+
+// ================= EMAIL SETUP =================
+const transporter = nodemailer.createTransport({
+  host: "smtp.ethereal.email",
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 // ================= FIREBASE TOKEN VERIFY =================
 const verifyFirebaseToken = async (req, res, next) => {
@@ -73,13 +89,73 @@ async function run() {
     };
 
     const verifyAdminOrModerator = async (req, res, next) => {
-      const user = await users.findOne({ email: req.decoded.email });
-      const role = user?.role?.toLowerCase();
-      if (!user || (role !== "admin" && role !== "moderator")) {
-        return res.status(403).send({ message: "Admin or Moderator only" });
-      }
-      next();
-    };
+  const user = await users.findOne({ email: req.decoded.email });
+  const role = user?.role?.toLowerCase();
+  if (!user || (role !== "admin" && role !== "moderator")) {
+    return res.status(403).send({ message: "Admin or Moderator only" });
+  }
+  next();
+};
+
+// ✅ এখানে cron job বসান
+cron.schedule("* * * * *", async () => {
+  try {
+    const today = new Date();
+    const threeDaysLater = new Date();
+    threeDaysLater.setDate(today.getDate() + 3);
+
+    const upcomingScholarships = await scholarships
+      .find({
+        deadline: {
+          $gte: today.toISOString().split("T")[0],
+          $lte: threeDaysLater.toISOString().split("T")[0],
+        },
+      })
+      .toArray();
+
+    if (upcomingScholarships.length === 0) {
+      console.log("No upcoming deadlines");
+      return;
+    }
+
+    const allUsers = await users.find({ role: "student" }).toArray();
+
+    for (const user of allUsers) {
+      if (!user.email) continue;
+      await transporter.sendMail({
+        from: `"ScholarStream" <${process.env.EMAIL_USER}>`,
+        to: user.email,
+        subject: "⏰ Scholarship Deadline Reminder!",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; background: #f9fafb; border-radius: 12px;">
+            <h2 style="color: #0891b2;">⏰ Deadline Approaching!</h2>
+            <p>Hi <strong>${user.name || "Student"}</strong>,</p>
+            <p>These scholarships are closing within <strong>3 days</strong>!</p>
+            <div style="background: #fff; padding: 16px; border-radius: 8px; border-left: 4px solid #0891b2; margin: 16px 0;">
+              ${upcomingScholarships.map((s) => `
+                <div style="margin-bottom: 12px;">
+                  <strong style="color: #0d9488;">${s.scholarshipName}</strong><br/>
+                  🏛️ ${s.universityName}, ${s.universityCountry}<br/>
+                  📅 Deadline: <span style="color: #ef4444;">${s.deadline}</span>
+                </div>
+              `).join("<hr/>")}
+            </div>
+            <a href="${process.env.CLIENT_URL}/scholarships"
+               style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #0891b2, #0d9488); color: white; border-radius: 8px; text-decoration: none; font-weight: bold;">
+              View All Scholarships →
+            </a>
+          </div>
+        `,
+      });
+    }
+    console.log(`✅ Reminder sent to ${allUsers.length} students`);
+  } catch (error) {
+    console.error("Cron job error:", error);
+  }
+});
+
+// ================= USERS =================
+    
 
     // ================= USERS =================
     app.get("/users", verifyFirebaseToken, verifyAdmin, async (req, res) => {
@@ -139,6 +215,80 @@ async function run() {
         res.send(result);
       }
     );
+
+
+
+app.post("/ai-match", async (req, res) => {
+  try {
+    const { gpa, degree, country, subject, budget } = req.body;
+
+    const allScholarships = await scholarships.find({}).toArray();
+
+    // Demo matching logic — no AI/API needed
+    const scored = allScholarships.map((s) => {
+      let score = 50; // base score
+
+      if (s.universityCountry?.toLowerCase() === country?.toLowerCase()) score += 20;
+      if (s.degree?.toLowerCase() === degree?.toLowerCase()) score += 15;
+      if (s.subjectCategory?.toLowerCase() === subject?.toLowerCase()) score += 10;
+      if (parseFloat(s.applicationFees) <= parseFloat(budget)) score += 5;
+      if (parseFloat(gpa) >= 3.5) score += 5; // high GPA bonus
+      
+      // Add small random variation so results feel dynamic
+      score += Math.floor(Math.random() * 5);
+      score = Math.min(score, 99); // cap at 99
+
+      return {
+        id: s._id,
+        name: s.scholarshipName,
+        university: s.universityName,
+        country: s.universityCountry,
+        matchScore: score,
+        reason: `Strong match based on your ${degree} in ${subject} with a GPA of ${gpa}.`,
+      };
+    });
+
+    // Sort by score, take top 3
+    const top3 = scored
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, 3);
+
+    res.send(top3);
+  } catch (error) {
+    console.error("AI Match Error:", error);
+    res.status(500).send({ message: error.message });
+  }
+});
+
+
+
+// ================= UPCOMING DEADLINES FOR BELL =================
+app.get("/upcoming-deadlines", verifyFirebaseToken, async (req, res) => {
+  try {
+    const today = new Date();
+    const sevenDaysLater = new Date();
+    sevenDaysLater.setDate(today.getDate() + 7);
+
+    const result = await scholarships
+      .find({
+        deadline: {
+          $gte: today.toISOString().split("T")[0],
+          $lte: sevenDaysLater.toISOString().split("T")[0],
+        },
+      })
+      .project({
+        scholarshipName: 1,
+        universityName: 1,
+        deadline: 1,
+      })
+      .toArray();
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: "Error fetching deadlines" });
+  }
+});
+
 
     // ================= SCHOLARSHIPS (WITH SEARCH & FILTER) =================
     app.get("/scholarships", async (req, res) => {
@@ -501,6 +651,25 @@ app.get("/reviews/public", async (req, res) => {
         }
       }
     );
+
+    // ================= ALL TRANSACTIONS =================
+app.get(
+  "/transactions",
+  verifyFirebaseToken,
+  verifyAdminOrModerator,
+  async (req, res) => {
+    try {
+      const result = await applications
+        .find({ paymentStatus: "paid" })
+        .sort({ appliedAt: -1 })
+        .toArray();
+
+      res.send(result);
+    } catch (error) {
+      res.status(500).send({ message: "Failed to fetch transactions" });
+    }
+  }
+);
     // ================= PAYMENT SUCCESS (FINAL FIX) =================
     app.patch("/payment-success", verifyFirebaseToken, async (req, res) => {
       try {
